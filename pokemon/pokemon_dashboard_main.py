@@ -1,189 +1,193 @@
 import pandas as pd
-import panel as pn
 import hvplot.pandas
+import panel as pn
+import sqlite3
 
-# Initialize the Panel extension
 pn.extension()
 
-# Load your Pokémon dataset
-pokemon_data = pd.read_csv('Pokemon.csv')
+# Set up SQLite database connection and create the table from CSV
+def setup_database():
+    conn = sqlite3.connect('pokemon.db')
+    pokemon_data = pd.read_csv('cleaned_pokemon.csv')
+    pokemon_data.to_sql('pokemon', conn, if_exists='replace', index=False)
+    print("Database created successfully.")  # Confirmation of database creation
+    conn.close()
 
-# Create widgets for the Attack Bar Plot
-poke_type_select_attack = pn.widgets.Select(
-    name='Select Pokémon Type:',
-    options=['All'] + list(pokemon_data['Type 1'].unique()),
-    value='All',
-    sizing_mode='stretch_width'
+# Call to set up the database on the first run
+setup_database()
+
+# Define API-like function to retrieve filtered data from SQLite
+def get_filtered_data(type1=None, generation=None, legendary=None):
+    conn = sqlite3.connect('pokemon.db')
+    query = "SELECT * FROM pokemon WHERE 1=1"
+
+    if type1:
+        query += f" AND type1 = '{type1}'"
+    if generation:
+        query += f" AND generation = {generation}"
+    if legendary is not None:
+        query += f" AND legendary = {int(legendary)}"
+
+    filtered_data = pd.read_sql(query, conn)
+    conn.close()
+    return filtered_data
+
+# Widgets for filtering Pokémon data
+poke_type_select = pn.widgets.Select(
+    name='Type 1',
+    options=['All'] + sorted(get_filtered_data()['type1'].unique().tolist())
 )
-attack_slider = pn.widgets.RangeSlider(
-    name='Attack Range:',
-    start=0,
-    end=190,
-    value=(50, 100),
-    sizing_mode='stretch_width'
-)
-num_pokemon_slider_attack = pn.widgets.IntSlider(
-    name='Number of Pokémon to Display:',
+poke_generation_select = pn.widgets.IntSlider(
+    name='Generation',
     start=1,
-    end=150,
-    value=10,
-    sizing_mode='stretch_width'
+    end=7,
+    value=1
+)
+poke_legendary_toggle = pn.widgets.Checkbox(
+    name='Legendary Only'
 )
 
-# Create widgets for the Attack vs. Defense Scatter Plot
-poke_type_select_scatter = pn.widgets.Select(
-    name='Select Pokémon Type (Scatter):',
-    options=['All'] + list(pokemon_data['Type 1'].unique()),
-    value='All',
-    sizing_mode='stretch_width'
-)
-attack_slider_scatter = pn.widgets.RangeSlider(
-    name='Attack Range (Scatter):',
+# Additional widgets for range selection and color
+poke_hp_slider = pn.widgets.IntSlider(
+    name='HP Range',
     start=0,
-    end=190,
-    value=(50, 100),
-    sizing_mode='stretch_width'
+    end=255,
+    value=0,
+    step=5
 )
-defense_slider = pn.widgets.RangeSlider(
-    name='Defense Range:',
+poke_attack_slider = pn.widgets.IntSlider(
+    name='Attack Range',
     start=0,
-    end=190,
-    value=(50, 100),
-    sizing_mode='stretch_width'
+    end=255,
+    value=0,
+    step=5
+)
+plot_color_picker = pn.widgets.ColorPicker(
+    name='Bar Color',
+    value='#0073e6'
 )
 
-# Create widgets for the Speed Histogram
-speed_slider = pn.widgets.RangeSlider(
-    name='Speed Range:',
-    start=0,
-    end=180,
-    value=(50, 100),
-    sizing_mode='stretch_width'
-)
-num_bins_slider = pn.widgets.IntSlider(
-    name='Number of Bins:',
-    start=5,
-    end=50,
-    value=10,
-    sizing_mode='stretch_width'
-)
+# Function to get filtered data based on widget values
+@pn.depends(poke_type_select.param.value, poke_generation_select.param.value, poke_legendary_toggle.param.value)
+def filter_pokemon_data(type_selected, generation_selected, legendary_toggle):
+    type1 = None if type_selected == 'All' else type_selected
+    filtered_data = get_filtered_data(type1=type1, generation=generation_selected, legendary=legendary_toggle)
+    return filtered_data
 
+# Function to update the first bar plot based on filtered data
+@pn.depends(poke_type_select.param.value, poke_generation_select.param.value, poke_legendary_toggle.param.value,
+            plot_color_picker.param.value)
+def update_overall_bar_plot(type_selected, generation_selected, legendary_toggle, color):
+    type1 = None if type_selected == 'All' else type_selected
+    filtered_data = get_filtered_data(type1=type1, generation=generation_selected, legendary=legendary_toggle)
 
-# Define a class to manage data filtering
-class PokemonAPI:
-    def __init__(self, data):
-        self.data = data
+    if filtered_data.empty:
+        return pn.pane.Markdown("### No Pokémon found for this filter combination.")
 
-    def filter_by_type(self, poke_type):
-        if poke_type == 'All':
-            return self.data
-        return self.data[self.data['Type 1'] == poke_type]
-
-    def filter_by_stats(self, min_attack, max_attack):
-        return self.data[(self.data['Attack'] >= min_attack) & (self.data['Attack'] <= max_attack)]
-
-    def filter_defense(self, min_defense, max_defense):
-        return self.data[(self.data['Defense'] >= min_defense) & (self.data['Defense'] <= max_defense)]
-
-    def filter_speed(self, min_speed, max_speed):
-        return self.data[(self.data['Speed'] >= min_speed) & (self.data['Speed'] <= max_speed)]
-
-
-# Create an instance of the API with the Pokémon data
-pokemon_api = PokemonAPI(pokemon_data)
-
-
-# Update plots based on widget values for Attack Bar Plot
-@pn.depends(poke_type_select_attack.param.value, attack_slider.param.value, num_pokemon_slider_attack.param.value)
-def update_attack_bar_plot(poke_type, attack_range, num_pokemon):
-    filtered_data = pokemon_api.filter_by_type(poke_type)
-    filtered_data = pokemon_api.filter_by_stats(attack_range[0], attack_range[1])
-    filtered_data = filtered_data.head(num_pokemon)
-
-    # Generate plots
     plot = filtered_data.hvplot.bar(
-        x='Name',
-        y='Attack',
-        title='Filtered Pokémon by Attack',
-        width=1000,
-        height=400
-    ).opts(xrotation=45)
+        x='name', y='overall capabilities', color=color,
+        title=f"Pokémon Overall Capabilities - {type_selected} (Gen {generation_selected})",
+        width=700, height=400
+    ).opts(show_grid=True)
+
     return plot
 
+# Function to update HP distribution plot
+@pn.depends(poke_hp_slider.param.value, poke_type_select.param.value)
+def update_hp_plot(hp_value, type_selected):
+    type1 = None if type_selected == 'All' else type_selected
+    filtered_data = get_filtered_data(type1=type1)
+    filtered_data = filtered_data[filtered_data['hp'] >= hp_value]
 
-# Update plots based on widget values for Attack vs. Defense Scatter Plot
-@pn.depends(poke_type_select_scatter.param.value, attack_slider_scatter.param.value, defense_slider.param.value)
-def update_attack_defense_scatter_plot(poke_type, attack_range, defense_range):
-    filtered_data = pokemon_api.filter_by_type(poke_type)
-    filtered_data = pokemon_api.filter_by_stats(attack_range[0], attack_range[1])
-    filtered_data = pokemon_api.filter_defense(defense_range[0], defense_range[1])
+    if filtered_data.empty:
+        return pn.pane.Markdown("### No Pokémon found for this HP range.")
 
-    # Generate scatter plot
-    scatter_plot = filtered_data.hvplot.scatter(
-        x='Attack',
-        y='Defense',
-        title='Attack vs. Defense',
-        width=1000,
-        height=400
+    plot = filtered_data.hvplot.hist(
+        y='hp', bins=20, color='orange', width=700, height=400,
+        title=f"HP Distribution for Pokémon with HP >= {hp_value}"
     )
-    return scatter_plot
 
+    return plot
 
-# Update plots based on widget values for Speed Histogram
-@pn.depends(speed_slider.param.value, num_bins_slider.param.value)
-def update_speed_histogram(speed_range, num_bins):
-    filtered_data = pokemon_api.filter_speed(speed_range[0], speed_range[1])
+# Function to update Attack vs Defense comparison plot
+@pn.depends(poke_attack_slider.param.value, poke_type_select.param.value)
+def update_attack_defense_plot(attack_value, type_selected):
+    type1 = None if type_selected == 'All' else type_selected
+    filtered_data = get_filtered_data(type1=type1)
+    filtered_data = filtered_data[filtered_data['attack'] >= attack_value]
 
-    # Generate histogram
-    histogram = filtered_data.hvplot.hist(
-        y='Speed',
-        bins=num_bins,
-        title='Distribution of Speed',
-        width=1000,
-        height=400
-    )
-    return histogram
+    if filtered_data.empty:
+        return pn.pane.Markdown("### No Pokémon found for this attack range.")
 
+    plot = filtered_data.hvplot.scatter(
+        x='attack', y='defense', color='purple', width=700, height=400,
+        title=f"Attack vs Defense for Pokémon with Attack >= {attack_value}"
+    ).opts(size=10)
 
-# Create informative descriptions for each component
-info_text = pn.pane.Markdown(
-    """
-    # Pokémon Dashboard (by Lauren and Aarushi)
+    return plot
 
-    Welcome to our Pokémon Dashboard! Use this interactive tool to explore and analyze Pokémon data. 
-    Adjust the filters below to see how different Pokémon stack up based on their attributes.
+# Function to update a plot for Attack and HP comparison
+@pn.depends(poke_attack_slider.param.value, poke_hp_slider.param.value)
+def update_attack_hp_plot(attack_value, hp_value):
+    filtered_data = get_filtered_data()
+    filtered_data = filtered_data[(filtered_data['attack'] >= attack_value) & (filtered_data['hp'] >= hp_value)]
 
-    ## Tab: Attack Bar Plot
-    - **Select Pokémon Type**: Choose a specific Pokémon type to filter results.
-    - **Attack Range**: Adjust the slider to limit Pokémon displayed by their Attack stats.
-    - **Number of Pokémon to Display**: Set the maximum number of Pokémon to display in the chart.
+    if filtered_data.empty:
+        return pn.pane.Markdown("### No Pokémon found for this attack and HP range.")
 
-    **Graph Explanation**: This bar plot visualizes the Attack stats of the selected Pokémon. Each bar represents a Pokémon's name on the x-axis and its corresponding Attack value on the y-axis. This visualization helps users compare the Attack power of different Pokémon.
+    plot = filtered_data.hvplot.scatter(
+        x='attack', y='hp', color='green', width=700, height=400,
+        title=f"Attack vs HP for Pokémon with Attack >= {attack_value} and HP >= {hp_value}"
+    ).opts(size=10)
 
-    ## Tab: Attack vs. Defense Scatter Plot
-    - **Select Pokémon Type (Scatter)**: Choose a specific Pokémon type for filtering.
-    - **Attack Range (Scatter)**: Adjust the slider to set minimum and maximum Attack values.
-    - **Defense Range**: Set minimum and maximum Defense values to filter the Pokémon shown.
+    return plot
 
-    **Graph Explanation**: This scatter plot visualizes the relationship between Pokémon's Attack and Defense stats. Each point represents a Pokémon plotted with its Attack on the x-axis and Defense on the y-axis, allowing users to analyze how these two stats correlate.
-
-    ## Tab: Speed Histogram
-    - **Speed Range**: Adjust this slider to limit the Pokémon based on their Speed stats.
-    - **Number of Bins**: Set the number of bins for the histogram to visualize the Speed distribution.
-
-    **Graph Explanation**: This histogram shows the distribution of Speed values among the selected Pokémon. The x-axis represents Speed intervals (bins), while the y-axis indicates the number of Pokémon that fall within each bin. This visualization helps users understand how Speed is distributed among Pokémon.
-    """
+# Define a general welcome message for all tabs
+welcome_message = pn.pane.Markdown(
+    "### Welcome to our Pokémon Dashboard! 🐾\n"
+    "This dashboard allows you to explore Pokémon data interactively.\n"
+    "Use the filters below to analyze various aspects of Pokémon capabilities.\n\n"
+    "**HP (Hit Points)** is a measure of a Pokémon's health. A Pokémon's HP decreases when it takes damage in battle. "
+    "If its HP drops to zero, the Pokémon is knocked out."
 )
 
-# Create the dashboard layout with tabs
+# Define the layout of the dashboard using tabs
+first_tab = pn.Column(
+    welcome_message,
+    pn.Row(poke_type_select, poke_generation_select, poke_legendary_toggle),
+    pn.pane.Markdown("#### Overall Capabilities\n"
+                     "In this section, you can filter Pokémon by their type, generation, and whether they are legendary.\n"
+                     "The bar plot displays the overall capabilities of the selected Pokémon, where you can customize the bar color."),
+    update_overall_bar_plot,
+    poke_hp_slider,
+    update_hp_plot
+)
+
+second_tab = pn.Column(
+    welcome_message,
+    pn.pane.Markdown("### Attack vs Defense\n"
+                     "In this tab, you can analyze the relationship between Pokémon attack and defense stats.\n"
+                     "Filter the Pokémon by their type, and select an attack value to visualize the data."),
+    pn.Row(poke_type_select, poke_attack_slider, plot_color_picker),
+    update_attack_defense_plot
+)
+
+third_tab = pn.Column(
+    welcome_message,
+    pn.pane.Markdown("### Attack vs HP\n"
+                     "Here, you can compare Pokémon's attack and HP values.\n"
+                     "Use the sliders to set minimum values for attack and HP, and see how they correlate."),
+    pn.Row(poke_attack_slider, poke_hp_slider),
+    update_attack_hp_plot
+)
+
+# Create the Panel dashboard with tabs
 tabs = pn.Tabs(
-    ('Attack Bar Plot', pn.Column(info_text, poke_type_select_attack, attack_slider, num_pokemon_slider_attack,
-                                  pn.panel(update_attack_bar_plot))),
-    ('Attack vs. Defense Scatter Plot',
-     pn.Column(info_text, poke_type_select_scatter, attack_slider_scatter, defense_slider,
-               pn.panel(update_attack_defense_scatter_plot))),
-    ('Speed Histogram', pn.Column(info_text, speed_slider, num_bins_slider, pn.panel(update_speed_histogram)))
+    ("Overall Capabilities", first_tab),
+    ("Attack vs Defense", second_tab),
+    ("Attack vs HP", third_tab)
 )
 
-# Serve the dashboard
-tabs.show()
+# Serve the dashboard if run as a script
+if __name__ == '__main__':
+    pn.serve(tabs)
