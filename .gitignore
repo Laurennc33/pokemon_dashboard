@@ -1,5 +1,9 @@
 # Byte-compiled / optimized / DLL files
+
+# SQLite database
+*.db
 !pokemon.db
+
 
 __pycache__/
 *.py[cod]
