@@ -174,7 +174,9 @@ first_tab = pn.Column(
                      "The bar plot displays the overall capabilities of the selected Pokémon (a summary metric that reflects a Pokémon's general strength or performance across various attributes), where you can customize the bar color."),
     update_overall_bar_plot,
     poke_hp_slider,
-    update_hp_plot
+    update_hp_plot,
+    width = 700,
+    height = 400
 )
 
 second_tab = pn.Column(
@@ -183,7 +185,9 @@ second_tab = pn.Column(
                      "In this tab, you can analyze the relationship between Pokémon attack and defense stats.\n"
                      "Filter the Pokémon by their type, and select an attack value to visualize the data."),
     pn.Row(poke_type_select, poke_attack_slider, plot_color_picker),
-    update_attack_defense_plot
+    update_attack_defense_plot,
+    width = 700,
+    height = 400
 )
 
 third_tab = pn.Column(
@@ -192,7 +196,9 @@ third_tab = pn.Column(
                      "In this tab, you can compare Pokémon's attack and HP values.\n"
                      "Use the sliders to set minimum values for attack and HP, and see how they correlate."),
     pn.Row(poke_attack_slider, poke_hp_slider),
-    update_attack_hp_plot
+    update_attack_hp_plot,
+    width = 700,
+    height = 400
 )
 
 
