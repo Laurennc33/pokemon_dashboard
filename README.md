@@ -60,7 +60,7 @@ Make sure the `cleaned_pokemon.csv` file is present in the same directory before
 
 ---
 
-## 5. How to Use the Widgets
+## 3. How to Use the Widgets
 
 1. **Select Pokémon Type:**  
    Use the dropdown to filter by Pokémon's primary type (e.g., Water, Fire). Select “All” to include all types.
@@ -79,7 +79,7 @@ Make sure the `cleaned_pokemon.csv` file is present in the same directory before
 
 ---
 
-## 6. Development and Customization
+## 4. Development and Customization
 
 - **Modify the SQL Queries:**  
   You can customize the filtering logic by modifying the `get_filtered_data()` function.
@@ -92,7 +92,7 @@ Make sure the `cleaned_pokemon.csv` file is present in the same directory before
 
 ---
 
-## 6. Running the Dashboard
+## 5. Running the Dashboard
 
 To run the dashboard:
 
