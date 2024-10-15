@@ -3,6 +3,8 @@
 # SQLite database
 *.db
 !pokemon.db
+*.sqlite3
+*.sqlite
 
 
 __pycache__/
